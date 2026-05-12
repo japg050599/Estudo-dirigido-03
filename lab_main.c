@@ -66,191 +66,304 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+// ==========================================================
+// DEFINES DO SISTEMA
+// ==========================================================
+
+// Quantidade de pontos armazenados para visualização no Graph Tool
 #define SIGNAL_SIZE        80
+
+// Tamanho da janela da média móvel
 #define FILTER_SIZE        16
+
+// Período do PWM por software
 #define PWM_PERIOD         100
+
+// Valor de PI utilizado na geração da senoide
 #define PI_VALUE           3.14159265f
 
+
+// ==========================================================
+// ENUMERAÇÃO DA FSM
+// ==========================================================
+// Define os possíveis estados do sistema
 typedef enum
 {
+    // Sistema desligado
     STATE_IDLE = 0,
+
+    // Sinal filtrado positivo
     STATE_POSITIVE,
+
+    // Sinal filtrado negativo
     STATE_NEGATIVE
 
 } SystemState_t;
 
-// ===================== VARIÁVEIS GLOBAIS =====================
 
-// Flag habilitação
+// ==========================================================
+// VARIÁVEIS GLOBAIS
+// ==========================================================
+
+// Flag que habilita/desabilita a modulação
+// Pode ser alterada pelo CCS em tempo real
 bool g_enableModulation = true;
 
-// ADC bruto e filtrado
+// Variável do sinal bruto gerado pelo ADC simulado
 float g_rawSignal = 0.0f;
+
+// Variável do sinal filtrado pela média móvel
 float g_filteredSignal = 0.0f;
 
-// Buffer média móvel
+
+// ==========================================================
+// BUFFER DO FILTRO
+// ==========================================================
+
+// Buffer circular utilizado pela média móvel
 float g_buffer[FILTER_SIZE];
+
+// Índice atual do buffer circular
 unsigned int g_bufferIndex = 0;
 
+
+// ==========================================================
 // FSM
+// ==========================================================
+
+// Estado atual do sistema
 SystemState_t g_state = STATE_IDLE;
 
+
+// ==========================================================
 // PWM
+// ==========================================================
+
+// Contador utilizado pelo PWM por software
 unsigned int g_pwmCounter = 0;
+
+// Duty-cycle atual
 float g_duty = 0.0f;
 
-// senoide
+
+// ==========================================================
+// SENOIDE E VISUALIZAÇÃO
+// ==========================================================
+
+// Ângulo atual da senoide
 float g_theta = 0.0f;
+
+// Buffer utilizado no Graph Tool para sinal bruto
 float g_buffersignal[SIGNAL_SIZE];
+
+// Buffer utilizado no Graph Tool para sinal filtrado
 float g_bufferfilteredsignal[SIGNAL_SIZE];
+
+// Índice dos buffers de visualização
 unsigned int g_buffersignalIndex = 0;
 
-// ===================== PROTÓTIPOS =====================
 
+// ==========================================================
+// PROTÓTIPOS DAS FUNÇÕES
+// ==========================================================
+
+// Gera sinal ADC simulado
 float generateSimulatedADC(void);
+
+// Executa filtro média móvel
 float movingAverage(float sample);
+
+// Atualiza a máquina de estados
 void updateFSM(void);
+
+// Atualiza o PWM por software
 void updatePWM(void);
 
 
-// ===================== MAIN ===========================
+// ==========================================================
+// FUNÇÃO MAIN
+// ==========================================================
 
 void main(void)
 {
-    // Device Initialization
+    // Inicializa clock e periféricos básicos do dispositivo
     Device_init();
 
-    //
-    // Initializes PIE and clears PIE registers. Disables CPU interrupts.
-    //
+    // Inicializa módulo de interrupções PIE
     Interrupt_initModule();
 
-    //
-    // Initializes the PIE vector table with pointers to the shell Interrupt
-    // Service Routines (ISR).
-    //
+    // Inicializa tabela de vetores de interrupção
     Interrupt_initVectorTable();
 
+    // Inicializa GPIOs e Timer configurados pelo SysConfig
 	Board_init();
 
-    //
-    // Enable Global Interrupt (INTM) and realtime interrupt (DBGM)
-    //
+    // Habilita interrupções globais
     EINT;
+
+    // Habilita depuração em tempo real
     ERTM;
 
+    // Loop infinito principal
+    // Todo processamento ocorre na ISR do timer
     while(1)
     {
     }	
 	
 }
 
-// ===================== ISR TIMER =====================
+
+// ==========================================================
+// ISR DO TIMER
+// ==========================================================
+// Executada periodicamente pelo CPU Timer configurado no SysConfig
 
 __interrupt void INT_Led_Toggle_Timer_ISR(void)
 {
- //   GPIO_togglePin(myBoardLED0_GPIO);
- //   GPIO_togglePin(myBoardLED1_GPIO);
 
  // =====================================================
     // 1. ADC SIMULADO
     // =====================================================
 
+    // Gera senoide com ruído
     g_rawSignal = generateSimulatedADC();
-    g_buffersignal[g_buffersignalIndex] = g_rawSignal- 2048.0f;
-    
+
+    // Armazena sinal bruto para visualização
+    // Subtração de 2048 centraliza o gráfico em zero
+    g_buffersignal[g_buffersignalIndex] =
+            g_rawSignal - 2048.0f;
+
 
     // =====================================================
     // 2. FILTRO
     // =====================================================
 
+    // Executa média móvel
     g_filteredSignal = movingAverage(g_rawSignal);
-    g_bufferfilteredsignal[g_buffersignalIndex] = g_filteredSignal- 2048.0f;
 
-    g_buffersignalIndex = (g_buffersignalIndex + 1)%SIGNAL_SIZE;
+    // Armazena sinal filtrado para visualização
+    g_bufferfilteredsignal[g_buffersignalIndex] =
+            g_filteredSignal - 2048.0f;
 
-    // Centraliza em zero
+    // Incrementa índice circular do buffer
+    g_buffersignalIndex =
+            (g_buffersignalIndex + 1) % SIGNAL_SIZE;
+
+    // Remove offset DC para análise da FSM
     g_filteredSignal = g_filteredSignal - 2048.0f;
+
 
     // =====================================================
     // 3. FSM
     // =====================================================
 
+    // Atualiza máquina de estados
     updateFSM();
+
 
     // =====================================================
     // 4. PWM SOFTWARE
     // =====================================================
 
+    // Atualiza LEDs com PWM por software
     updatePWM();
 
 
-    Interrupt_clearACKGroup(INT_Led_Toggle_Timer_INTERRUPT_ACK_GROUP);
+    // Limpa flag da interrupção do PIE
+    Interrupt_clearACKGroup(
+            INT_Led_Toggle_Timer_INTERRUPT_ACK_GROUP);
 }
 
-// ===================== ADC SIMULADO =====================
+
+// ==========================================================
+// ADC SIMULADO
+// ==========================================================
+// Gera uma senoide com ruído aleatório
 
 float generateSimulatedADC(void)
 {
     float noise;
 
-    // senoide centrada em 2048
-    float signal = 2048.0f + 1000.0f * sinf(g_theta);
+    // Senoide centrada em 2048
+    // Amplitude de 1000
+    float signal =
+            2048.0f + 1000.0f * sinf(g_theta);
 
-    // ruído +-50
-    noise = ((float)(rand() % 100) - 50.0f);
+    // Gera ruído aleatório entre -50 e +50
+    noise =
+            ((float)(rand() % 100) - 50.0f);
 
-    //g_theta += 0.08f;
+    // Incrementa ângulo da senoide
+    // 80 pontos correspondem a um período completo
     g_theta += 0.07854f;
 
+    // Mantém theta dentro do intervalo 0 até 2PI
+    // Evita descontinuidade na senoide
     if(g_theta >= 2.0f * PI_VALUE)
     {
-        //g_theta = 0.0f;
         g_theta -= 2.0f * PI_VALUE;
     }
 
+    // Retorna senoide + ruído
     return signal + noise;
 }
 
-// ===================== MÉDIA MÓVEL =====================
+
+// ==========================================================
+// FILTRO MÉDIA MÓVEL
+// ==========================================================
+// Implementação utilizando buffer circular
 
 float movingAverage(float sample)
 {
     float sum = 0.0f;
     unsigned int i;
 
+    // Insere nova amostra no buffer
     g_buffer[g_bufferIndex] = sample;
 
+    // Incrementa índice do buffer
     g_bufferIndex++;
 
+    // Reinicia índice ao atingir final do buffer
     if(g_bufferIndex >= FILTER_SIZE)
     {
         g_bufferIndex = 0;
     }
 
+    // Soma todas as amostras do buffer
     for(i = 0; i < FILTER_SIZE; i++)
     {
         sum += g_buffer[i];
     }
 
+    // Retorna média das amostras
     return sum / FILTER_SIZE;
 }
 
 
-// ===================== FSM =====================
+// ==========================================================
+// FSM
+// ==========================================================
+// Define estado atual baseado no sinal filtrado
 
 void updateFSM(void)
 {
+    // Se modulação desabilitada
+    // entra no estado IDLE
     if(g_enableModulation == false)
     {
         g_state = STATE_IDLE;
         return;
     }
 
+    // Sinal positivo
     if(g_filteredSignal > 0)
     {
         g_state = STATE_POSITIVE;
     }
+
+    // Sinal negativo
     else
     {
         g_state = STATE_NEGATIVE;
@@ -258,40 +371,52 @@ void updateFSM(void)
 }
 
 
-// ===================== PWM =====================
+// ==========================================================
+// PWM POR SOFTWARE
+// ==========================================================
+// Controla brilho dos LEDs
 
 void updatePWM(void)
 {
     float absValue;
 
+    // Incrementa contador do PWM
     g_pwmCounter++;
 
+    // Reinicia contador ao atingir período
     if(g_pwmCounter >= PWM_PERIOD)
     {
         g_pwmCounter = 0;
     }
 
-    // LEDs OFF inicialmente
+    // LEDs inicialmente desligados
+    // LEDs da LaunchPad são ativos em nível baixo
     GPIO_writePin(myBoardLED0_GPIO, 1);
     GPIO_writePin(myBoardLED1_GPIO, 1);
 
+    // Estado IDLE mantém LEDs desligados
     if(g_state == STATE_IDLE)
     {
         return;
     }
 
+    // Obtém valor absoluto do sinal
     absValue = fabsf(g_filteredSignal);
 
-    // duty proporcional
+    // Duty-cycle proporcional à amplitude do sinal
     g_duty = absValue / 1000.0f;
 
+    // Limita duty máximo em 100%
     if(g_duty > 1.0f)
     {
         g_duty = 1.0f;
     }
 
-    unsigned int compare = (unsigned int)(g_duty * PWM_PERIOD);
+    // Calcula valor de comparação do PWM
+    unsigned int compare =
+            (unsigned int)(g_duty * PWM_PERIOD);
 
+    // Estado positivo controla LED verde
     if(g_state == STATE_POSITIVE)
     {
         if(g_pwmCounter < compare)
@@ -300,6 +425,7 @@ void updatePWM(void)
         }
     }
 
+    // Estado negativo controla LED azul
     if(g_state == STATE_NEGATIVE)
     {
         if(g_pwmCounter < compare)
