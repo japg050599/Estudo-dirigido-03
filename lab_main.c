@@ -157,7 +157,7 @@ __interrupt void INT_Led_Toggle_Timer_ISR(void)
     // =====================================================
 
     g_rawSignal = generateSimulatedADC();
-    g_buffersignal[g_buffersignalIndex] = g_rawSignal;
+    g_buffersignal[g_buffersignalIndex] = g_rawSignal- 2048.0f;
     
 
     // =====================================================
@@ -165,7 +165,7 @@ __interrupt void INT_Led_Toggle_Timer_ISR(void)
     // =====================================================
 
     g_filteredSignal = movingAverage(g_rawSignal);
-    g_bufferfilteredsignal[g_buffersignalIndex] = g_filteredSignal;
+    g_bufferfilteredsignal[g_buffersignalIndex] = g_filteredSignal- 2048.0f;
 
     g_buffersignalIndex = (g_buffersignalIndex + 1)%SIGNAL_SIZE;
 
@@ -205,8 +205,8 @@ float generateSimulatedADC(void)
 
     if(g_theta >= 2.0f * PI_VALUE)
     {
-        g_theta = 0.0f;
-        //g_theta -= 2.0f * PI_VALUE;
+        //g_theta = 0.0f;
+        g_theta -= 2.0f * PI_VALUE;
     }
 
     return signal + noise;
