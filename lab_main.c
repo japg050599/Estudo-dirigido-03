@@ -229,9 +229,9 @@ __interrupt void INT_Led_Toggle_Timer_ISR(void)
     g_rawSignal = generateSimulatedADC();
 
     // Armazena sinal bruto para visualização
-    // Subtração de 2048 centraliza o gráfico em zero
+    // para visualizar no grah tool os sinais centralizados em zero, colocar um -2048.0f
     g_buffersignal[g_buffersignalIndex] =
-            g_rawSignal - 2048.0f;
+            g_rawSignal ;
 
 
     // =====================================================
@@ -243,14 +243,14 @@ __interrupt void INT_Led_Toggle_Timer_ISR(void)
 
     // Armazena sinal filtrado para visualização
     g_bufferfilteredsignal[g_buffersignalIndex] =
-            g_filteredSignal - 2048.0f;
+            g_filteredSignal ;
 
     // Incrementa índice circular do buffer
     g_buffersignalIndex =
             (g_buffersignalIndex + 1) % SIGNAL_SIZE;
 
-    // Remove offset DC para análise da FSM
-    g_filteredSignal = g_filteredSignal - 2048.0f;
+    // Remove offset DC para análise da FSM , para poder ver os semiciclos positivos e negativos da senoide através dos LEDS
+    g_filteredSignal = g_filteredSignal - 2048.0f ;
 
 
     // =====================================================
@@ -284,14 +284,12 @@ float generateSimulatedADC(void)
 {
     float noise;
 
-    // Senoide centrada em 2048
+    // Senoide centrada em 2048 - Obs: para ver os leds variando tirar o valor médio 2048.0f
     // Amplitude de 1000
-    float signal =
-            2048.0f + 1000.0f * sinf(g_theta);
+    float signal = 2048.0f + 1000.0f * sinf(g_theta);
 
     // Gera ruído aleatório entre -50 e +50
-    noise =
-            ((float)(rand() % 100) - 50.0f);
+    noise =   ((float)(rand() % 100) - 50.0f);
 
     // Incrementa ângulo da senoide
     // 80 pontos correspondem a um período completo

@@ -30,7 +30,7 @@ cputimer1.$name                    = "Led_Toggle_Timer";
 cputimer1.enableInterrupt          = true;
 cputimer1.registerInterrupts       = true;
 cputimer1.startTimer               = true;
-cputimer1.timerPeriod              = 1000;
+cputimer1.timerPeriod              = 15000000;
 cputimer1.timerInt.enableInterrupt = true;
 
 /**
